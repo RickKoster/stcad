@@ -15,6 +15,7 @@ class SuspendedDrum(cad.core.Cell):
 	def __init__(self, drum_size, drum_gap, tether_width):
 		super()
 		self._objects=[]
+		self._references = []
 		self._bounding_box = None
 
 		self.drum_size = drum_size
@@ -70,7 +71,6 @@ class SuspendedDrum(cad.core.Cell):
 			self.add(cad.core.Boundary(label[i].points, layer=1))
 		self.bounding_box()
 
-
 class simple_drum(SuspendedDrum): #Drum with 4 tethers, no rounded corners.
 	def __init__(self, drum_size, drum_gap, tether_width):
 		SuspendedDrum.__init__(self, drum_size, drum_gap, tether_width)
@@ -90,9 +90,6 @@ class simple_drum(SuspendedDrum): #Drum with 4 tethers, no rounded corners.
 
 	def get_details(self):
 		return "drum_size = %s, drum_gap = %s, tether_width =  %s." % (self.drum_size, self.drum_gap, self.tether_width)
-
-	
-
 
 class rounded_drum(SuspendedDrum): #Drum with 4 tethers, rounded corners. Gaps are created by joining a trapezoid to a partial disk.
 	def __init__(self, drum_size, drum_gap, tether_width):
@@ -117,7 +114,6 @@ class rounded_drum(SuspendedDrum): #Drum with 4 tethers, rounded corners. Gaps a
 		self.add(gap4)
 
 		self.bounding_box()
-
 
 class simple_drum3(SuspendedDrum): #Drum with 3 tethers, no rounding of corners.
 	def __init__(self, drum_size, drum_gap, tether_width):
@@ -286,8 +282,6 @@ class circular_drum2(SuspendedDrum): # Circular drum with 2 tethers, no rounded 
 class circ_gap_drum(SuspendedDrum): # Drums created by making gaps out of Disk shapes centered along a circle with radius depending on drum_size, tether_width, and number_of_tethers. 
 	def __init__(self,drum_size, tether_width, number_of_tethers):
 		
-		
-
 		self.number_of_tethers = number_of_tethers
 
 		alpha = 360/(self.number_of_tethers)
@@ -313,11 +307,14 @@ class circ_gap_drum(SuspendedDrum): # Drums created by making gaps out of Disk s
 		self._references = []
 		self.bounding_box()
 
-
-
-
-
-
+class diving_board(SuspendedDrum): # Rectangular drum with 2 tethers. no rounded corners.
+	def __init__(self, drum_size, drum_gap, tether_width):
+		SuspendedDrum.__init__(self, drum_size, drum_gap, tether_width)
+		self.name = f"{tether_width}, {drum_gap}, {drum_size} "
+		self.points = [[0,0],[drum_gap + drum_size,0],[drum_gap + drum_size,-(2*drum_gap + tether_width)],[0,-(2*drum_gap + tether_width)],[0, -(drum_gap + tether_width)], [drum_size, -(drum_gap + tether_width)],[drum_size, -drum_gap], [0,-drum_gap],[0,0]]
+		board = cad.core.Boundary(self.points)
+		self.add(board)
+		self.bounding_box()
 
 def round_corner(arr, points, corner_rad, nr_of_points):
 	# Takes a point from a point list and replaces it by a series of points that create a partial circle connected to the points above and below on the list.
@@ -394,7 +391,7 @@ def round_corner(arr, points, corner_rad, nr_of_points):
 	return corners_temp;
 
 class Array(cad.core.Layout): # Parent class for all drum array types.
-	def __init__(self, label_separation=30, separation=30, sub_array_separation = 60, array_indicator=None):
+	def __init__(self, label_separation=15, separation=30, sub_array_separation = 60, array_indicator=None):
 		super()
 		self.label_separation = label_separation
 		self.separation = separation
@@ -455,9 +452,6 @@ class Array(cad.core.Layout): # Parent class for all drum array types.
 
 
 		self.bounding_box()
-
-
-
 
 class simple_drum_Array(Array): # Puts drums of type simple_drum with a range of parameters in an array. Bounding box of the largest drum is used to determine spacing between drums, such that they dont overlap.
 	def __init__(self, drum_sizes, drum_gaps, tether_widths, array_indicator = None):
@@ -645,7 +639,6 @@ class rounded_base_drum5_Array(Array): # Puts drums of type rounded_base_drum5 w
 					self.add(drum_temp)
 		self.bounding_box()
 
-
 class simple_drum2_Array(Array): # Puts drums of type simple_drum2 with a range of parameters in an array. Bounding box of the largest drum is used to determine spacing between drums, such that they dont overlap.
 	def __init__(self, drum_sizes, drum_length, drum_gaps, tether_widths, tether_length, array_indicator = None):
 		Array.__init__(self)
@@ -767,34 +760,200 @@ class circ_gap_drum_Array(Array): # Puts drums of type circ_gap_drum with a rang
 		else:
 			self.array_indicator = " "
 		super()
-		max_drum_size = max(drum_sizes)
-		max_tether_width = max(tether_widths)
-		max_nr_of_tethers = min(numbers_of_tethers)
+		
+		sub_array_offset = 0
+		for i in range(len(drum_sizes)):
+			max_drum_size = drum_sizes[i]
+			self.separation = 4*max_drum_size
 
-		max_drum = circ_gap_drum(drum_size=max_drum_size, tether_width=max_tether_width, number_of_tethers=max_nr_of_tethers)
+			max_tether_width = min(tether_widths)
+			max_nr_of_tethers = min(numbers_of_tethers)
+
+			max_drum = circ_gap_drum(drum_size=max_drum_size, tether_width=max_tether_width, number_of_tethers=max_nr_of_tethers)
+			max_drum.add_labl(position = (min(max_drum._bounding_box[:,0]),min(max_drum._bounding_box[:,1])-self.label_separation))
+
+			bb = max_drum.bounding_box()
+			max_width = abs(bb[0,0]-bb[1,0])
+			max_height = abs(bb[0,1]-bb[1,1])
+
+			if i != 0:
+				sub_array_offset += max_width/2
+				self.sub_array_separation = 4*drum_sizes[i-1]
+			else:
+				self.sub_array_separation = 8*drum_sizes[0]
+
+
+			sub_array_height = (max_height)*len(tether_widths)+ self.sub_array_separation
+			sub_array_width = (max_width)*len(numbers_of_tethers)+ self.sub_array_separation
+
+			
+
+			for j in range(len(tether_widths)):
+				for k in range(len(numbers_of_tethers)):
+					# name = f"{i}.{j}.{k}"
+
+					# print(name)
+					drum_temp = circ_gap_drum(drum_size=drum_sizes[i],tether_width=tether_widths[j], number_of_tethers=numbers_of_tethers[k])
+					# drum_temp.name=name
+
+
+					# print(drum_temp._objects)
+					drum_temp.translate(position=[k*(max_width+self.separation) + sub_array_offset,-j*(max_height+self.separation)])
+					drum_temp.add_labl(position = (min(drum_temp._bounding_box[:,0]),min(drum_temp._bounding_box[:,1])-self.label_separation), array_indicator=self.array_indicator)
+					# print(drum_temp._objects[:])
+					drum_temp._references = []
+
+					self.add(drum_temp)
+					print("drum_temp",drum_temp)
+					print("drum_temp.elements",drum_temp.elements)
+			sub_array_offset += sub_array_width
+			self.bounding_box()
+
+class diving_board_Array(Array): # Puts drums of type simple_drum2 with a range of parameters in an array. Bounding box of the largest drum is used to determine spacing between drums, such that they dont overlap.
+	def __init__(self, drum_sizes, drum_gaps, tether_widths, array_indicator = None, separation=50):
+		Array.__init__(self)
+		if array_indicator != None:
+			self.array_indicator = array_indicator
+		else:
+			self.array_indicator = " "
+		super()
+
+		self.separation = separation
+
+		max_drum_size = max(drum_sizes)
+		max_drum_gap = max(drum_gaps)
+		max_tether_width = max(tether_widths)
+
+		max_drum = diving_board(drum_size=max_drum_size, drum_gap=max_drum_gap, tether_width=max_tether_width)
 		max_drum.add_labl(position = (min(max_drum._bounding_box[:,0]),min(max_drum._bounding_box[:,1])-self.label_separation))
 
 		bb = max_drum.bounding_box()
 		max_width = abs(bb[0,0]-bb[1,0])
 		max_height = abs(bb[0,1]-bb[1,1])
-		sub_array_height = (max_height+self.sub_array_separation)*len(numbers_of_tethers)
+		sub_array_height = (max_height+self.sub_array_separation)*len(drum_gaps)
 
-		for i in range(len(numbers_of_tethers)):
+
+		for i in range(len(drum_gaps)):
 			for j in range(len(tether_widths)):
 				for k in range(len(drum_sizes)):
 					# name = f"{i}.{j}.{k}"
-
 					# print(name)
-					drum_temp = circ_gap_drum(drum_size=drum_sizes[k],tether_width=tether_widths[j], number_of_tethers=numbers_of_tethers[i])
+					drum_temp = diving_board(drum_size=drum_sizes[k], drum_gap=drum_gaps[i], tether_width=tether_widths[j])
 					# drum_temp.name=name
 
 
 					# print(drum_temp._objects)
-					drum_temp.translate(position=[k*(max_width+self.separation),-j*(max_height+self.separation)-i*(sub_array_height+self.separation)])
+					drum_temp.translate(position=[k*(max_width+self.separation),-i*(max_height+self.separation)-j*(sub_array_height+self.separation)])
 					drum_temp.add_labl(position = (min(drum_temp._bounding_box[:,0]),min(drum_temp._bounding_box[:,1])-self.label_separation), array_indicator=self.array_indicator)
 					# print(drum_temp._objects[:])
 					drum_temp._references = []
 					self.add(drum_temp)
+		self.bounding_box()
+
+class circuit_drum(SuspendedDrum):
+	def __init__(self, drum = None, oversize = 80, lead_length = 100, lead_width = 20, cut_out_height = 150, cut_out_width = 150):
+		super()
+		self._objects=[]
+		self._references = []
+		self._bounding_box = None
+		
+		# drum_bb = drum.bounding_box()
+		# drum_size = bb[1][0]bb[0][0]
+		min_gap = 20
+		if drum == None:
+			drum_size = 30
+
+		drum_bb = drum.bounding_box()
+		# print(drum_bb)
+		drum_size = max(abs(drum_bb[0][0] - drum_bb[1][0]),abs(drum_bb[0][1] - drum_bb[1][1]))
+		disk_radius = drum_size/2 + oversize
+		if cut_out_height < 2*disk_radius +2*min_gap:
+			cut_out_height = 2*disk_radius +2*min_gap
+			print("cut_out_height too small, increased to accomodate drum")
+
+		if cut_out_width < lead_length + 2*disk_radius + min_gap:
+			cut_out_width = lead_length + 2*disk_radius + min_gap
+			print("cut_out_width too small, increased to accomodate drum")
+		self.name = f"{oversize}, {lead_length}, {lead_width}, {round(cut_out_height,1)},{round(cut_out_width,1)} "
+		alpha = np.rad2deg(np.arcsin((lead_width/2)/disk_radius))
+
+		# disk_offset = lead_length + self.drum.bounding_box()/2 + self.oversize
+		disk_offset = lead_length + drum_size/2 + oversize
+		platform = cad.shapes.Disk(center = (0,0),radius = disk_radius,initial_angle=-180+alpha,final_angle=180-alpha, number_of_points=100)
+		# print(platform.points)
+		disk_end = platform.points[0]
+		cut_out_points = np.delete(np.flip(platform.points,0), 0, 0)
+		disk_start = cut_out_points[0]
+
+		#	Adding points to create cut-out around drum.
+		next_point_temp = disk_end + [-lead_length,0]
+		cut_out_points = np.vstack([cut_out_points, next_point_temp])
+		next_point_temp = next_point_temp + [0,-((cut_out_height-lead_width)/2)]
+		cut_out_points = np.vstack([cut_out_points, next_point_temp])
+		next_point_temp = next_point_temp + [cut_out_width,0]
+		cut_out_points = np.vstack([cut_out_points, next_point_temp])
+		next_point_temp = next_point_temp + [0,cut_out_height]
+		cut_out_points = np.vstack([cut_out_points, next_point_temp])
+		next_point_temp = next_point_temp + [-cut_out_width,0]
+		cut_out_points = np.vstack([cut_out_points, next_point_temp])
+		next_point_temp = next_point_temp + [0,-((cut_out_height-lead_width)/2)]
+		cut_out_points = np.vstack([cut_out_points, next_point_temp])
+		cut_out_points = np.vstack([cut_out_points, cut_out_points[0]])
+		
+		# Creating boundary from new point list
+		cut_out = cad.core.Boundary(cut_out_points)
+		# print(cut_out_points[len(cut_out_points)-2])
+		drum.translate(-cut_out_points[len(cut_out_points)-2])
+		cut_out.translate(-cut_out_points[len(cut_out_points)-2])
+		# print(drum.bounding_box())
+
+		self.add(cut_out)
+		self.add(drum.elements)
+		self.bounding_box()
+		self.add_labl(position = (min(self._bounding_box[:,0]),min(self._bounding_box[:,1])-20))
+		self.bounding_box()
+		# print(self)
+		# print(cut_out_points)
+
+	def get_details(self):
+		return "drum_size = %s, drum_gap = %s, tether_width =  %s." % (self.drum_size, self.drum_gap, self.tether_width)
+
+	def bounding_box(self):
+		# Return the smallest rectangle enclosing the drum.
+		bb = np.zeros([2,2])
+		# if self._bounding_box is not None:
+		# 	return self._bounding_box.copy()
+		for i in range(len(self._objects)):
+			if i == 0:
+				bb[0,0] = self._objects[i]._points[:,0].min()
+				bb[0,1] = self._objects[i]._points[:,1].min()
+				bb[1,0] = self._objects[i]._points[:,0].max()
+				bb[1,1] = self._objects[i]._points[:,1].max()
+			else:
+				bb[0,0] = min(self._objects[i]._points[:,0].min(), bb[0,0])
+				bb[0,1] = min(self._objects[i]._points[:,1].min(), bb[0,1])
+				bb[1,0] = max(self._objects[i]._points[:,0].max(), bb[1,0])
+				bb[1,1] = max(self._objects[i]._points[:,1].max(), bb[1,1])
+
+		self._bounding_box = bb
+		return bb
+
+	def translate(self, position):
+		# Translates the center of the drum from its original position (0,0) by the vector 'position'
+		
+		for i in range(len(self._objects)):
+			self._objects[i].points = cad.utils.translate(self._objects[i].points, position)
+		self.bounding_box()
+
+	def add_to_chip(self, Base_Chip):
+		Base_Chip.add(self._objects)
+
+	def add_labl(self, position = (0,0), array_indicator = None):
+		if array_indicator != None:
+			self.name += array_indicator
+		label = cad.shapes.Label(text = self.name, size=3, position = position, horizontal=True, angle=0, layer=None, datatype=None)
+		for i in range(len(label)):
+			self.add(cad.core.Boundary(label[i].points, layer=1))
 		self.bounding_box()
 
 class MyLabel(cad.core.Cell):
